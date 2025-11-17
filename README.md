@@ -1,4 +1,1 @@
-Run app.py
-Run custom_data_models.py
-Create .env files for NEWS_API_KEY and WEATHER_API_KEY found at https://newsapi.org and https://openweathermap.org 
-The .env file should be in the custom_data_models dir and the requriements.txt files does not cover the libraries required for the custom_data_model so just look into that
+Run app.py,Run custom_data_models.py.Create .env files for NEWS_API_KEY and WEATHER_API_KEY found at https://newsapi.org and https://openweathermap.org . The .env file should be in the custom_data_models dir and the requriements.txt files does not cover the libraries required for the custom_data_model so just look into that
