@@ -1,0 +1,10 @@
+pandas
+numpy
+tensorflow
+keras
+matplotlib
+seaborn
+nsepythonserver
+plotly
+mplfinance
+yfinance
