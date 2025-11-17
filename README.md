@@ -1,14 +1,4 @@
----
-title: Indian Stockmarket Prediction
-emoji: 📈📉
-colorFrom: red
-colorTo: green
-sdk: gradio
-sdk_version: 5.20.0
-app_file: app.py
-pinned: true
-license: apache-2.0
-short_description: AI algorithm for Indian stock market prediction
----
-
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+Run app.py
+Run custom_data_models.py
+Create .env files for NEWS_API_KEY and WEATHER_API_KEY found at https://newsapi.org and https://openweathermap.org 
+The .env file should be in the custom_data_models dir and the requriements.txt files does not cover the libraries required for the custom_data_model so just look into that
