@@ -240,7 +240,7 @@ class IndianWeatherCollector:
                     weather_data[city] = response.json()
             except Exception as e:
                 print(f"Warning: Could not fetch weather for {city}: {e}")
-        
+    
         return weather_data
     
     def calculate_weather_impact_india(self, weather_data: Dict, sector: str, 
@@ -303,13 +303,21 @@ class MultiSourceScorer:
         self.weights.validate()  # ✅ NEW: Validate weights
     
     def score_news(self, news_features: Dict) -> float:
-        """Score news sentiment"""
         if not news_features or news_features.get('news_volume', 0) == 0:
             return 0.0
         
         sentiment = news_features.get('sentiment_mean', 0)
-        volume_factor = min(news_features.get('news_volume', 0) / 20, 1.0)
-        confidence = 1 - min(news_features.get('sentiment_std', 0), 0.5) / 0.5
+        volume = news_features.get('news_volume', 0)
+        std_dev = news_features.get('sentiment_std', 0)
+        
+  
+        volume_factor = min(volume / 20, 1.0)
+        
+      
+        confidence = 1.0 / (1.0 + std_dev)
+        
+
+        confidence = max(confidence, 0.3)
         
         score = sentiment * volume_factor * confidence
         return np.clip(score, -1.0, 1.0)

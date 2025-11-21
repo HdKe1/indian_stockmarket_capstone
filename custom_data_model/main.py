@@ -126,7 +126,8 @@ class NIFTYPredictionPipeline:
         weather_impact = self.weather_collector.calculate_weather_impact_india(
             weather_data, sector, headquarters
         )
-        print(f"   Weather Impact: {weather_impact.get('impact_score', 0):+.2f}")
+       
+
         if weather_impact.get('is_monsoon_season'):
             print(f"   🌧️  Monsoon Season Active")
         
@@ -203,7 +204,7 @@ class NIFTYPredictionPipeline:
                 text = f"{article.get('title', '')} {article.get('description', '')}"
                 if text.strip():
                     result = sentiment_analyzer(text[:512])
-                    # FinBERT returns: positive, negative, neutral
+                 
                     label = result[0]['label'].lower()
                     score = result[0]['score']
                     
@@ -237,7 +238,7 @@ class NIFTYPredictionPipeline:
     def _print_results(self, result, symbol, current_price):
         """Print formatted prediction results"""
         print(f"\n{'='*70}")
-        print(f"पूर्वानुमान परिणाम / PREDICTION RESULTS - {symbol}")
+        print(f"PREDICTION RESULTS - {symbol}")
         print(f"{'='*70}")
         print(f"Current Price:          ₹{current_price:.2f}")
         print(f"Base TS Prediction:     ₹{result['timeseries_prediction']:.2f}")
