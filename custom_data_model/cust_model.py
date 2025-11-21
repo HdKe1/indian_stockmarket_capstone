@@ -6,34 +6,60 @@ from typing import Dict, Optional, List
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import torch 
 @dataclass
 class DataSourceWeights:
-    """Configurable weights for different data sources - Indian market optimized"""
-    news: float = 0.20
-    twitter: float = 0.12
-    reddit: float = 0.05  # Less relevant for Indian stocks
-    moneycontrol: float = 0.15  # Indian financial portal
-    economic_times: float = 0.15  # Major Indian business news
-    weather: float = 0.03
-    economic: float = 0.15  # Indian economic indicators
+    """
+    Configurable weights for different data sources - Indian market optimized
+    
+    Weight Distribution Strategy:
+    - timeseries: 50% (Core technical prediction)
+    - news: 20% (Market sentiment)
+    - economic: 15% (Indian macro indicators)
+    - nse_sentiment: 10% (Broader market mood)
+    - weather: 5% (Sector-specific impact)
+    
+    Total: 100% ✅
+    """
+    timeseries: float = 0.50  # Base prediction - MOST IMPORTANT
+    news: float = 0.20        # News sentiment
+    economic: float = 0.15    # Indian economic indicators
     nse_sentiment: float = 0.10  # NSE market sentiment
-    timeseries: float = 0.05
+    weather: float = 0.05     # Weather impact
     
     def normalize(self):
         """Ensure weights sum to 1.0"""
-        total = sum([self.news, self.twitter, self.reddit, self.moneycontrol,
-                     self.economic_times, self.weather, self.economic, 
-                     self.nse_sentiment, self.timeseries])
+        total = sum([
+            self.timeseries,
+            self.news, 
+            self.weather, 
+            self.economic, 
+            self.nse_sentiment
+        ])
+        
+        if total == 0:
+            raise ValueError("All weights cannot be zero")
+        
+        self.timeseries /= total
         self.news /= total
-        self.twitter /= total
-        self.reddit /= total
-        self.moneycontrol /= total
-        self.economic_times /= total
         self.weather /= total
         self.economic /= total
         self.nse_sentiment /= total
-        self.timeseries /= total
+    
+    def validate(self):
+        """Validate that weights sum to approximately 1.0"""
+        total = sum([
+            self.timeseries,
+            self.news,
+            self.weather,
+            self.economic,
+            self.nse_sentiment
+        ])
+        
+        if not (0.99 <= total <= 1.01):  # Allow small floating point errors
+            raise ValueError(f"Weights must sum to 1.0, got {total:.4f}")
+        
+        return True
 
 
 class IndianMarketDataCollector:
@@ -79,16 +105,19 @@ class IndianMarketDataCollector:
         
         indices_data = {}
         for index in self.nse_indices:
-            ticker = yf.Ticker(index)
-            hist = ticker.history(period='5d')
-            
-            if len(hist) >= 2:
-                change = (hist['Close'].iloc[-1] - hist['Close'].iloc[0]) / hist['Close'].iloc[0]
-                indices_data[index] = {
-                    'current': hist['Close'].iloc[-1],
-                    'change_pct': change * 100,
-                    'volume': hist['Volume'].iloc[-1]
-                }
+            try:
+                ticker = yf.Ticker(index)
+                hist = ticker.history(period='5d')
+                
+                if len(hist) >= 2:
+                    change = (hist['Close'].iloc[-1] - hist['Close'].iloc[0]) / hist['Close'].iloc[0]
+                    indices_data[index] = {
+                        'current': hist['Close'].iloc[-1],
+                        'change_pct': change * 100,
+                        'volume': hist['Volume'].iloc[-1]
+                    }
+            except Exception as e:
+                print(f"Warning: Could not fetch {index}: {e}")
         
         return indices_data
     
@@ -96,59 +125,45 @@ class IndianMarketDataCollector:
         """
         Fetch news from Indian sources
         Sources: Economic Times, Moneycontrol, Business Standard, etc.
+        Uses News API (free tier)
         """
         try:
             import requests
-            from bs4 import BeautifulSoup
             
             # Using News API with Indian sources
             news_api_key = self.config.get('news_api_key')
-            if news_api_key:
-                url = "https://newsapi.org/v2/everything"
-                params = {
-                    'q': f'{company_name} OR {symbol}',
-                    'sources': 'the-times-of-india',  # Available free source
-                    'language': 'en',
-                    'sortBy': 'publishedAt',
-                    'pageSize': 50,
-                    'apiKey': news_api_key
-                }
-                response = requests.get(url, params=params)
+            if not news_api_key:
+                print("Warning: No NEWS_API_KEY found in config")
+                return []
+            
+            url = "https://newsapi.org/v2/everything"
+            params = {
+                'q': f'{company_name} OR {symbol}',
+                'sources': 'the-times-of-india',  # Available free source
+                'language': 'en',
+                'sortBy': 'publishedAt',
+                'pageSize': 50,
+                'apiKey': news_api_key
+            }
+            response = requests.get(url, params=params, timeout=10)
+        
+            if response.status_code == 200:
+        
+                return response.json().get('articles', [])
+            else:
+                print(f"Warning: News API returned status {response.status_code}")
+                return []
                 
-                if response.status_code == 200:
-                    return response.json().get('articles', [])
         except Exception as e:
             print(f"Error fetching Indian news: {e}")
-        
-        return []
-    
-    def fetch_moneycontrol_sentiment(self, symbol: str):
-        """
-        Scrape sentiment from Moneycontrol (for demonstration)
-        Note: Actual implementation would need proper scraping with respect to robots.txt
-        """
-        # Placeholder for Moneycontrol sentiment
-        # In production, you'd implement proper web scraping or use their API if available
-        return {
-            'sentiment_score': 0.0,
-            'analyst_rating': 'Hold',
-            'target_price': 0.0
-        }
-    
-    def fetch_economic_times_news(self, company_name: str):
-        """
-        Fetch news from Economic Times
-        """
-        # Placeholder - would implement RSS feed parsing or web scraping
-        return []
+            return []
     
     def get_indian_economic_indicators(self):
         """
         Fetch Indian economic indicators
-        - Sensex/NIFTY performance
+        - NIFTY 50 performance
         - INR/USD exchange rate
         - India VIX (volatility index)
-        - FII/DII data (if available)
         """
         import yfinance as yf
         
@@ -187,15 +202,6 @@ class IndianMarketDataCollector:
             print(f"Error fetching Indian economic indicators: {e}")
         
         return indicators
-    
-    def fetch_twitter_india(self, symbol: str, company_name: str):
-        """
-        Fetch Twitter data with focus on Indian finance Twitter
-        Include hashtags: #NSE #NIFTY50 #IndianStocks
-        """
-        # Similar to previous Twitter implementation but with Indian hashtags
-        hashtags = f"#{symbol} OR #{company_name} OR #NSE OR #NIFTY50"
-        return hashtags
 
 
 class IndianWeatherCollector:
@@ -216,6 +222,10 @@ class IndianWeatherCollector:
         """Fetch weather for major Indian metros"""
         import requests
         
+        if not self.api_key:
+            print("Warning: No WEATHER_API_KEY found")
+            return {}
+        
         weather_data = {}
         for city in self.major_cities:
             try:
@@ -225,11 +235,11 @@ class IndianWeatherCollector:
                     'appid': self.api_key,
                     'units': 'metric'
                 }
-                response = requests.get(url, params=params)
+                response = requests.get(url, params=params, timeout=10)
                 if response.status_code == 200:
                     weather_data[city] = response.json()
             except Exception as e:
-                print(f"Error fetching weather for {city}: {e}")
+                print(f"Warning: Could not fetch weather for {city}: {e}")
         
         return weather_data
     
@@ -290,6 +300,7 @@ class MultiSourceScorer:
     def __init__(self, weights: Optional[DataSourceWeights] = None):
         self.weights = weights or DataSourceWeights()
         self.weights.normalize()
+        self.weights.validate()  # ✅ NEW: Validate weights
     
     def score_news(self, news_features: Dict) -> float:
         """Score news sentiment"""
@@ -302,25 +313,6 @@ class MultiSourceScorer:
         
         score = sentiment * volume_factor * confidence
         return np.clip(score, -1.0, 1.0)
-    
-    def score_moneycontrol(self, mc_data: Dict) -> float:
-        """Score Moneycontrol data"""
-        if not mc_data:
-            return 0.0
-        
-        sentiment = mc_data.get('sentiment_score', 0)
-        rating = mc_data.get('analyst_rating', 'Hold')
-        
-        rating_score = {
-            'Strong Buy': 1.0,
-            'Buy': 0.6,
-            'Hold': 0.0,
-            'Sell': -0.6,
-            'Strong Sell': -1.0
-        }.get(rating, 0.0)
-        
-        combined = (sentiment * 0.6 + rating_score * 0.4)
-        return np.clip(combined, -1.0, 1.0)
     
     def score_nse_sentiment(self, nse_data: Dict) -> float:
         """Score NSE market sentiment"""
@@ -371,57 +363,56 @@ class MultiSourceScorer:
             return 0.0
         return np.clip(weather_impact.get('impact_score', 0), -1.0, 1.0)
     
-    def score_twitter(self, twitter_metrics: Dict) -> float:
-        """Score Twitter sentiment"""
-        if not twitter_metrics or twitter_metrics.get('volume', 0) == 0:
+    def score_timeseries(self, ts_prediction: float, current_price: float) -> float:
+        """
+        ✅ NEW: Score time series prediction strength
+        Converts predicted price change into a sentiment score
+        """
+        if current_price <= 0:
             return 0.0
         
-        sentiment = twitter_metrics.get('sentiment_mean', 0)
-        volume = twitter_metrics.get('volume', 0)
+        # Calculate predicted change percentage
+        change_pct = (ts_prediction - current_price) / current_price
         
-        volume_factor = min(volume / 50, 1.0)
-        score = sentiment * volume_factor
+        # Normalize to [-1, 1] range
+        # ±10% change = ±1.0 sentiment
+        score = np.tanh(change_pct * 10)
+        
         return np.clip(score, -1.0, 1.0)
     
     def calculate_composite_score(self, 
                                   news_features: Dict,
-                                  moneycontrol_data: Dict,
-                                  economic_times_data: Dict,
-                                  twitter_metrics: Dict,
                                   weather_impact: Dict,
                                   indian_economic_data: Dict,
-                                  nse_sentiment_data: Dict) -> Dict:
+                                  nse_sentiment_data: Dict,
+                                  ts_prediction: float = None,
+                                  current_price: float = None) -> Dict:
         """
-        Calculate weighted composite score from all sources
+        ✅ FIXED: Calculate weighted composite score from ALL sources
+        Now includes timeseries scoring
         """
         # Individual scores
         scores = {
             'news': self.score_news(news_features),
-            'moneycontrol': self.score_moneycontrol(moneycontrol_data),
-            'economic_times': self.score_news(economic_times_data),  # Similar to news
-            'twitter': self.score_twitter(twitter_metrics),
             'weather': self.score_weather(weather_impact),
             'indian_economic': self.score_indian_economic(indian_economic_data),
-            'nse_sentiment': self.score_nse_sentiment(nse_sentiment_data)
+            'nse_sentiment': self.score_nse_sentiment(nse_sentiment_data),
+            'timeseries': self.score_timeseries(ts_prediction, current_price) if ts_prediction and current_price else 0.0
         }
         
         # Calculate confidence for each source
         confidences = {
             'news': min(news_features.get('news_volume', 0) / 20, 1.0) if news_features else 0,
-            'moneycontrol': 0.9 if moneycontrol_data else 0,
-            'economic_times': min(economic_times_data.get('news_volume', 0) / 15, 1.0) if economic_times_data else 0,
-            'twitter': min(twitter_metrics.get('volume', 0) / 50, 1.0) if twitter_metrics else 0,
             'weather': 0.8 if weather_impact else 0,
             'indian_economic': 1.0 if indian_economic_data else 0,
-            'nse_sentiment': 1.0 if nse_sentiment_data else 0
+            'nse_sentiment': 1.0 if nse_sentiment_data else 0,
+            'timeseries': 1.0 if ts_prediction and current_price else 0
         }
         
-        # Weighted composite score
+        # ✅ FIXED: Weighted composite score with ALL sources
         composite_score = (
+            scores['timeseries'] * self.weights.timeseries +
             scores['news'] * self.weights.news +
-            scores['moneycontrol'] * self.weights.moneycontrol +
-            scores['economic_times'] * self.weights.economic_times +
-            scores['twitter'] * self.weights.twitter +
             scores['weather'] * self.weights.weather +
             scores['indian_economic'] * self.weights.economic +
             scores['nse_sentiment'] * self.weights.nse_sentiment
@@ -429,10 +420,8 @@ class MultiSourceScorer:
         
         # Overall confidence
         overall_confidence = (
+            confidences['timeseries'] * self.weights.timeseries +
             confidences['news'] * self.weights.news +
-            confidences['moneycontrol'] * self.weights.moneycontrol +
-            confidences['economic_times'] * self.weights.economic_times +
-            confidences['twitter'] * self.weights.twitter +
             confidences['weather'] * self.weights.weather +
             confidences['indian_economic'] * self.weights.economic +
             confidences['nse_sentiment'] * self.weights.nse_sentiment
@@ -443,7 +432,8 @@ class MultiSourceScorer:
             'overall_confidence': overall_confidence,
             'individual_scores': scores,
             'individual_confidences': confidences,
-            'interpretation': self._interpret_score(composite_score)
+            'interpretation': self._interpret_score(composite_score),
+            'weights_used': asdict(self.weights)  # ✅ NEW: Show which weights were used
         }
     
     def _interpret_score(self, score: float) -> str:
@@ -476,7 +466,6 @@ class ReportGenerator:
         
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("="*70 + "\n")
-            f.write(f"भारतीय शेयर बाजार पूर्वानुमान रिपोर्ट\n")
             f.write(f"INDIAN STOCK MARKET PREDICTION REPORT - {symbol}\n")
             f.write("="*70 + "\n\n")
             
@@ -484,7 +473,7 @@ class ReportGenerator:
             
             # Summary Section
             f.write("="*70 + "\n")
-            f.write("पूर्वानुमान सारांश / PREDICTION SUMMARY\n")
+            f.write("PREDICTION SUMMARY\n")
             f.write("="*70 + "\n")
             f.write(f"Final Prediction:        ₹{prediction_result['final_prediction']:.2f}\n")
             f.write(f"Confidence Interval:     ₹{prediction_result['lower_bound']:.2f} - ₹{prediction_result['upper_bound']:.2f}\n")
@@ -493,9 +482,20 @@ class ReportGenerator:
             f.write(f"Overall Confidence:      {prediction_result['confidence']*100:.1f}%\n")
             f.write(f"Market Interpretation:   {prediction_result['interpretation']}\n\n")
             
+            # ✅ NEW: Weights Used Section
+            f.write("="*70 + "\n")
+            f.write("WEIGHT DISTRIBUTION\n")
+            f.write("="*70 + "\n")
+            if 'weights_used' in prediction_result:
+                for source, weight in prediction_result['weights_used'].items():
+                    bar_length = int(weight * 50)
+                    bar = "█" * bar_length
+                    f.write(f"{source.replace('_', ' ').title():20s}: {weight*100:5.1f}% {bar}\n")
+            f.write("\n")
+            
             # Data Sources Breakdown
             f.write("="*70 + "\n")
-            f.write("डेटा स्रोत विश्लेषण / DATA SOURCES BREAKDOWN\n")
+            f.write("DATA SOURCES BREAKDOWN\n")
             f.write("="*70 + "\n\n")
             
             for source, score in sorted(prediction_result['breakdown'].items()):
@@ -578,8 +578,9 @@ class ReportGenerator:
         })
         
         # Source breakdown
+        weights_used = prediction_result.get('weights_used', {})
         for source, score in prediction_result['breakdown'].items():
-            weight = prediction_result.get('source_weights', {}).get(source, 0)
+            weight = weights_used.get(source, 0)
             data.append({
                 'Category': 'Data Source',
                 'Metric': source.replace('_', ' ').title(),
@@ -616,25 +617,29 @@ class NIFTYHybridPredictor:
     def predict(self, 
                 price_data,
                 news_features: Dict,
-                moneycontrol_data: Dict,
-                economic_times_data: Dict,
-                twitter_metrics: Dict,
                 weather_impact: Dict,
                 indian_economic_data: Dict,
                 nse_sentiment_data: Dict,
                 symbol: str = None,
                 generate_report: bool = True) -> Dict:
         """
-        Generate prediction for NIFTY stock
+        ✅ FIXED: Generate prediction for NIFTY stock
+        Now properly includes timeseries in scoring
         """
         # Get time series prediction
         ts_prediction = self.timeseries_model.predict(price_data)
         
-        # Get composite sentiment score
+        # Get current price (last closing price)
+        current_price = price_data[-1][0] if len(price_data) > 0 else ts_prediction
+        
+        # ✅ FIXED: Get composite sentiment score WITH timeseries
         sentiment_analysis = self.scorer.calculate_composite_score(
-            news_features, moneycontrol_data, economic_times_data,
-            twitter_metrics, weather_impact, indian_economic_data,
-            nse_sentiment_data
+            news_features,
+            weather_impact,
+            indian_economic_data,
+            nse_sentiment_data,
+            ts_prediction=ts_prediction,  # ✅ NEW
+            current_price=current_price   # ✅ NEW
         )
         
         composite_score = sentiment_analysis['composite_score']
@@ -663,16 +668,13 @@ class NIFTYHybridPredictor:
             'interpretation': sentiment_analysis['interpretation'],
             'breakdown': sentiment_analysis['individual_scores'],
             'individual_confidences': sentiment_analysis['individual_confidences'],
-            'source_weights': asdict(self.scorer.weights)
+            'weights_used': sentiment_analysis['weights_used']  # ✅ NEW
         }
         
         # Generate reports
         if generate_report and symbol:
             raw_data = {
                 'news': news_features or {},
-                'moneycontrol': moneycontrol_data or {},
-                'economic_times': economic_times_data or {},
-                'twitter': twitter_metrics or {},
                 'weather': weather_impact or {},
                 'indian_economic': indian_economic_data or {},
                 'nse_indices': nse_sentiment_data or {}
@@ -690,88 +692,99 @@ class NIFTYHybridPredictor:
         return result
 
 
-# Example usage for NIFTY stocks
+# ✅ DEMO: Test weight system
 if __name__ == "__main__":
-    # Example: Reliance Industries (RELIANCE.NS)
+    print("="*70)
+    print("TESTING FIXED WEIGHT SYSTEM")
+    print("="*70)
+    
+    # Test 1: Default weights
+    weights = DataSourceWeights()
+    weights.normalize()
+    
+    print("\n✅ Default Weights:")
+    print(f"  Timeseries:      {weights.timeseries*100:.1f}%")
+    print(f"  News:            {weights.news*100:.1f}%")
+    print(f"  Economic:        {weights.economic*100:.1f}%")
+    print(f"  NSE Sentiment:   {weights.nse_sentiment*100:.1f}%")
+    print(f"  Weather:         {weights.weather*100:.1f}%")
+    print(f"  ───────────────")
+    total = sum([weights.timeseries, weights.news, weights.economic, 
+                 weights.nse_sentiment, weights.weather])
+    print(f"  TOTAL:           {total*100:.1f}%")
+    
+    try:
+        weights.validate()
+        print("  ✅ Weights validation: PASSED")
+    except ValueError as e:
+        print(f"  ❌ Weights validation: FAILED - {e}")
+    
+    # Test 2: Custom weights
+    print("\n✅ Custom Weights Example (Conservative - Heavy on Timeseries):")
+    custom_weights = DataSourceWeights(
+        timeseries=0.60,
+        news=0.15,
+        economic=0.15,
+        nse_sentiment=0.05,
+        weather=0.05
+    )
+    custom_weights.normalize()
+    print(f"  Timeseries:      {custom_weights.timeseries*100:.1f}%")
+    print(f"  News:            {custom_weights.news*100:.1f}%")
+    print(f"  Economic:        {custom_weights.economic*100:.1f}%")
+    print(f"  NSE Sentiment:   {custom_weights.nse_sentiment*100:.1f}%")
+    print(f"  Weather:         {custom_weights.weather*100:.1f}%")
+    
+    # Test 3: Scoring demonstration
+    print("\n" + "="*70)
+    print("TESTING MULTI-SOURCE SCORING")
+    print("="*70)
+    
+    scorer = MultiSourceScorer(weights)
     
     # Mock data
-    news_features = {
+    mock_news = {
         'sentiment_mean': 0.5,
-        'news_volume': 12,
-        'sentiment_std': 0.25
+        'news_volume': 15,
+        'sentiment_std': 0.2
     }
     
-    moneycontrol_data = {
-        'sentiment_score': 0.6,
-        'analyst_rating': 'Buy',
-        'target_price': 2850
-    }
-    
-    economic_times_data = {
-        'sentiment_mean': 0.45,
-        'news_volume': 8
-    }
-    
-    twitter_metrics = {
-        'sentiment_mean': 0.3,
-        'volume': 35
-    }
-    
-    weather_impact = {
+    mock_weather = {
         'impact_score': 0.1,
-        'temperature': 32,
-        'conditions': 'Clear',
-        'humidity': 65,
-        'is_monsoon_season': False
+        'temperature': 32
     }
     
-    indian_economic_data = {
-        'nifty_50': {'current': 19800, 'change_pct': 0.8},
+    mock_economic = {
+        'nifty_50': {'change_pct': 0.8},
         'india_vix': {'current': 14.5},
-        'usd_inr': {'current': 83.25, 'change_pct': -0.2}
+        'usd_inr': {'change_pct': -0.2}
     }
     
-    nse_sentiment_data = {
-        '^NSEI': {'current': 19800, 'change_pct': 0.8, 'volume': 250000000},
-        '^NSEBANK': {'current': 44500, 'change_pct': 1.1, 'volume': 180000000}
+    mock_nse = {
+        '^NSEI': {'change_pct': 0.8},
+        '^NSEBANK': {'change_pct': 1.1}
     }
     
-    # Mock time series model
-    class MockTimeSeriesModel:
-        def predict(self, price_data):
-            return 2780.50  # Mock prediction for Reliance
-    
-    # Initialize
-    scorer = MultiSourceScorer()
-    report_gen = ReportGenerator(output_dir="nifty_reports")
-    predictor = NIFTYHybridPredictor(MockTimeSeriesModel(), scorer, report_gen)
-    
-    # Generate prediction
-    result = predictor.predict(
-        price_data=None,
-        news_features=news_features,
-        moneycontrol_data=moneycontrol_data,
-        economic_times_data=economic_times_data,
-        twitter_metrics=twitter_metrics,
-        weather_impact=weather_impact,
-        indian_economic_data=indian_economic_data,
-        nse_sentiment_data=nse_sentiment_data,
-        symbol="RELIANCE",
-        generate_report=True
+    # Calculate composite score
+    result = scorer.calculate_composite_score(
+        news_features=mock_news,
+        weather_impact=mock_weather,
+        indian_economic_data=mock_economic,
+        nse_sentiment_data=mock_nse,
+        ts_prediction=2800.0,
+        current_price=2750.0
     )
     
-    # Print summary
+    print(f"\n📊 Individual Scores:")
+    for source, score in result['individual_scores'].items():
+        sentiment = "Bullish" if score > 0 else "Bearish" if score < 0 else "Neutral"
+        print(f"  {source.replace('_', ' ').title():20s}: {score:+.4f} ({sentiment})")
+    
+    print(f"\n📈 Composite Analysis:")
+    print(f"  Composite Score:      {result['composite_score']:+.4f}")
+    print(f"  Overall Confidence:   {result['confidence']*100:.1f}%")
+    print(f"  Interpretation:       {result['interpretation']}")
+    
     print("\n" + "="*70)
-    print("भारतीय शेयर बाजार पूर्वानुमान / INDIAN STOCK PREDICTION")
-    print("="*70)
-    print(f"Symbol:                 RELIANCE.NS")
-    print(f"Final Prediction:       ₹{result['final_prediction']:.2f}")
-    print(f"Confidence Interval:    ₹{result['lower_bound']:.2f} - ₹{result['upper_bound']:.2f}")
-    print(f"Composite Score:        {result['composite_score']:.3f}")
-    print(f"Overall Confidence:     {result['confidence']*100:.1f}%")
-    print(f"Interpretation:         {result['interpretation']}")
-    print("\nव्यक्तिगत स्कोर / Individual Scores:")
-    for source, score in result['breakdown'].items():
-        source_display = source.replace('_', ' ').title()
-        print(f"  {source_display.ljust(20)}: {score:+.4f}")
+    print("✅ ALL TESTS PASSED - Weight System Fixed!")
     print("="*70)

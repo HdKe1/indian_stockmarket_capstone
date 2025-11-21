@@ -45,18 +45,6 @@ class NIFTYPredictionPipeline:
         news_features = self._process_news(news_articles)
         print(f"   Found {news_features.get('news_volume', 0)} articles")
         
-        # 3. Moneycontrol (placeholder)
-        print("\n💼 Fetching Moneycontrol sentiment...")
-        moneycontrol_data = self.market_collector.fetch_moneycontrol_sentiment(symbol)
-        
-        # 4. Economic Times (placeholder)
-        print("\n📊 Fetching Economic Times data...")
-        et_features = {'news_volume': 0, 'sentiment_mean': 0}
-        
-        # 5. Twitter (placeholder)
-        print("\n🐦 Fetching social media sentiment...")
-        twitter_metrics = {'sentiment_mean': 0, 'volume': 0}
-        
         # 6. Weather
         print("\n🌤️  Fetching weather data...")
         weather_data = self.weather_collector.fetch_weather_multiple_cities()
@@ -86,9 +74,7 @@ class NIFTYPredictionPipeline:
         result = predictor.predict(
             price_data=price_data,
             news_features=news_features,
-            moneycontrol_data=moneycontrol_data,
-            economic_times_data=et_features,
-            twitter_metrics=twitter_metrics,
+           
             weather_impact=weather_impact,
             indian_economic_data=indian_economic,
             nse_sentiment_data=nse_indices,

@@ -274,9 +274,6 @@ with open("about.md", "r") as file:
 with gr.Blocks() as demo:
     gr.Markdown("# Indian Stock Market Prediction App")
 
-    # About the App
-    with gr.Tab("About the App"):
-        gr.Markdown(about_lines)  
         
     # Market Prediction Tab
     with gr.Tab("Market Prediction"):
@@ -299,31 +296,7 @@ with gr.Blocks() as demo:
     # Set up the interface
     predict_button.click(predict_the_future, inputs=stock_input, outputs=[output_open, output_high, output_low, output_close, graph_output_prediction])
 
-    # Comparing the models
-    with gr.Tab("Model Comparision"):
-        with gr.Row(variant="panel"):
-            with gr.Column(scale=1, variant="panel"):
-                # Stock Selection
-                stock_input = gr.Dropdown(choices=SYMBOLS, label="Stock Picker:", info="Select the desired stock to predict future values!")
-            with gr.Column(scale=1, variant="panel"):
-                # Submit the Stock name to find predictions
-                evaluate_button = gr.Button("Evaluate Prediction")
-        with gr.Row(variant="panel"):
-            with gr.Column(scale=1, variant="panel"):
-                # Display the Charts
-                graph_output_open = gr.Plot(label="Evaluations - Open")
-            with gr.Column(scale=1, variant="panel"):
-                # Display the Charts
-                graph_output_high = gr.Plot(label="Evaluations - High")
-        with gr.Row(variant="panel"):
-            with gr.Column(scale=1, variant="panel"):
-                # Display the Charts
-                graph_output_low = gr.Plot(label="Evaluations - Low")
-            with gr.Column(scale=1, variant="panel"):
-                # Display the Charts
-                graph_output_close = gr.Plot(label="Evaluations - Close")
-    # Set up the interface
-    evaluate_button.click(model_comparisions, inputs=stock_input, outputs=[graph_output_open, graph_output_high, graph_output_low, graph_output_close])
+   
         
 if __name__ == "__main__":
     demo.launch()
