@@ -1,0 +1,7 @@
+﻿Category,Metric,Value,Weight,Notes
+Final Prediction,Price (INR),₹373.09,1.0,स्थिर (Neutral)
+Data Source,News,0.0000,0.2000,Neutral
+Data Source,Weather,0.0000,0.0500,Neutral
+Data Source,Indian Economic,0.0298,0.0000,Bullish
+Data Source,Nse Sentiment,0.1227,0.1000,Bullish
+Data Source,Timeseries,0.1484,0.5000,Bullish
